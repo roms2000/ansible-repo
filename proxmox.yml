@@ -1,0 +1,8 @@
+---
+- hosts: all
+  gather_facts: no
+  remote_user: root
+  serial: 1
+  roles:
+    - proxmox
+
