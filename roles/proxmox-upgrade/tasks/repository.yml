@@ -1,0 +1,71 @@
+---
+#
+# update repository sources
+#
+- name: "repository"
+  tags: repository
+  block:
+  
+    - name: "repository : community"
+      when: enterprise|bool == False
+      block: 
+            
+        - name: "repository : community : enterprise remove"
+          ansible.builtin.file:
+            path: /etc/apt/sources.list.d/pve-enterprise.sources
+            state: absent
+
+        - name: "repository : community : community sources"
+          ansible.builtin.template:
+            src: 'templates/proxmox.sources.tpl'
+            dest: '/etc/apt/sources.list.d/proxmox.sources'
+            
+        - name: "repository : community : ceph"
+          ansible.builtin.template:
+            src: 'templates/ceph.sources.tpl'
+            dest: '/etc/apt/sources.list.d/ceph.sources'
+            
+    - name: "repository : enterprise"
+      when: enterprise|bool == True
+      block: 
+            
+        - name: "repository : enterprise : community remove"
+          ansible.builtin.file:
+            path: /etc/apt/sources.list.d/proxmox.sources
+            state: absent
+    
+        - name: "repository : enterprise : enterprise sources"
+          ansible.builtin.template:
+            src: 'templates/proxmox.sources.tpl'
+            dest: '/etc/apt/sources.list.d/pve-enterprise.sources'
+
+        - name: "repository : enterprise : ceph"
+          ansible.builtin.template:
+            src: 'templates/ceph.sources.tpl'
+            dest: '/etc/apt/sources.list.d/ceph.sources'
+
+    - name: "repository : remove old sources"
+      block:
+      
+        - name: "repository : remove old sources.d.list"
+          ansible.builtin.file:
+            path: /etc/apt/sources.list.d/{{ item }}
+            state: absent
+          loop: 
+            - "pve-enterprise.list"
+            - "pve-community.list"
+            - "ceph.list"
+            - "hwraid.le-vert.net.list"
+
+        #- name: "repository : remove old hwraid.le-vert.net.list"
+        #  ansible.builtin.file:
+        #    path: /etc/apt/sources.list.d/hwraid.le-vert.net.list
+        #    state: absent
+        #  when: os_codename == 'trixie'
+
+- name: "repository modernize"
+  tags: modernize
+  block:
+
+    - name: "apt modernize-sources -y"
+      ansible.builtin.shell: apt modernize-sources -y

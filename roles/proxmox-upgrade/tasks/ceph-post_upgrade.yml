@@ -1,0 +1,32 @@
+---
+# ---------------------------------------------------------------------- post upgrade seulement ----------------------------------------------------------------------
+- name: ceph
+  tags: ceph
+  block:
+
+    - name: "ceph : install"
+      apt:
+        name: ceph
+        state: latest
+        update_cache: yes
+        
+    - name: "ceph : activate volume"
+      ansible.builtin.shell: ceph-volume lvm activate --all
+      ignore_errors: true
+
+    - name: "ceph : telemetry license"
+      ansible.builtin.shell: ceph telemetry on --license sharing-1-0
+      ignore_errors: true
+      
+    - name: "ceph : telemetry enable"
+      ansible.builtin.shell: ceph telemetry enable channel perf
+      ignore_errors: true
+
+    - name: "ceph : config"
+      ansible.builtin.shell: |
+        ceph config set global bdev_async_discard_threads 1
+        ceph config set global bdev_enable_discard true
+        ceph config set osd osd_memory_target 6442450944
+        ceph config set osd bluestore_slow_ops_warn_lifetime 600
+      ignore_errors: true
+

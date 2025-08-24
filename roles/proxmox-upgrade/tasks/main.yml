@@ -1,0 +1,118 @@
+---
+# tasks file for proxmox upgrade
+
+# ---------------------------------------------------------------------- nodes list ----------------------------------------------------------------------
+- name: "list nodes"
+  tags: [ never, nodes ]
+  when: 
+    - "'nodes' in group_names"
+  block:
+    
+    - name: "get nodes"
+      ansible.builtin.shell: pvecm status | grep -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | awk '{print $3}'
+      register: result
+
+    - name: "nodes"
+      set_fact:
+        nodes: "{{ result['stdout_lines'] }}"
+
+    - name: "get nodes names"
+      ansible.builtin.shell: pvecm nodes | awk '{print $3}' | grep -v -E '^\s*$|Name'
+      register: result
+
+    - name: "nodes names"
+      set_fact:
+        nodes_names: "{{ result['stdout_lines'] }}"
+
+    #- name:  loop sur les noeuds"
+    #  ansible.builtin.debug:
+    #    msg: "{{ item }}"
+    #  loop: '{{ nodes }}'
+    
+    - name: "liste des noeuds"
+      debug:
+        msg: '{{ nodes }}'
+    
+    - name: "liste des noms des noeuds"
+      debug:
+        msg: '{{ nodes_names }}'
+
+
+# ---------------------------------------------------------------------- update / upgrade ----------------------------------------------------------------------
+- name: "update"
+  tags: 
+    - update
+    - upgrade
+  when: 
+    - "'nodes' not in group_names"
+  block:
+
+    - name: "variables"
+      block: 
+
+        - name: "current shell get os_codename"
+          ansible.builtin.shell: cat /etc/os-release | grep -m 1 -E '^VERSION_CODENAME' | cut -d '=' -f 2
+          register: result
+        
+        - name: "set current_os_codename"
+          set_fact:
+            current_os_codename: '{{ result.stdout }}'
+            
+        - name: "set os_codename if update only"
+          set_fact:
+            os_codename: '{{ current_os_codename }}'
+          when:
+            - upgrade is not defined or upgrade == ''
+      
+    
+    - name: "tasks update"
+      block:
+
+        - name: "tasks repository - before update"
+          ansible.builtin.import_tasks: 
+            file: repository.yml
+
+        - name: "tasks update"
+          ansible.builtin.import_tasks: 
+            file: update.yml
+
+    
+    - name: "tasks upgrade"
+      when:
+        - upgrade is defined
+        - upgrade|bool == True
+      block:
+
+        - name: "tasks ceph - pre upgrade"
+          tags: pre_upgrade
+          ansible.builtin.import_tasks: 
+            file: ceph-pre_upgrade.yml
+
+        - name: "tasks upgrade"
+          ansible.builtin.import_tasks: 
+            file: upgrade.yml
+
+        - name: "tasks repository - after upgrade"
+          ansible.builtin.import_tasks: 
+            file: repository.yml
+    
+        - name: "tasks ceph - after upgrade"
+          tags: post_upgrade
+          ansible.builtin.import_tasks: 
+            file: ceph-post_upgrade.yml
+
+
+# ---------------------------------------------------------------------- reboot ----------------------------------------------------------------------
+- name: "reboot"
+  tags: 
+    - reboot
+  when: 
+    - "'nodes' not in group_names"
+  block:
+
+    - name: "tasks reboot"
+      ansible.builtin.import_tasks: 
+        file: reboot.yml
+
+
+# ---------------------------------------------------------------------- final step ----------------------------------------------------------------------

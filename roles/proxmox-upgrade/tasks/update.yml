@@ -1,0 +1,17 @@
+---
+- name: "update"
+  tags: update
+  block:
+
+    - name: "apt : full-upgrade"
+      apt:
+        autoclean: true
+        autoremove: false
+        dpkg_options: "force-confdef,force-confold"
+        force: false
+        install_recommends: false
+        state: latest
+        update_cache: true
+        upgrade: full
+      #when:
+      #  - upgrade is not defined or upgrade == ''

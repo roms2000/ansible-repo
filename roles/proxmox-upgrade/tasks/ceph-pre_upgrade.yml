@@ -1,0 +1,9 @@
+---
+# ---------------------------------------------------------------------- pre update/upgrade seulement ----------------------------------------------------------------------
+- name: ceph
+  tags: ceph
+  block:
+
+      - name: "upgrade : ceph osd set noout"
+        ansible.builtin.shell: ceph osd set noout
+        ignore_errors: true

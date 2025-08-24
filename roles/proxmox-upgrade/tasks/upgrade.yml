@@ -1,0 +1,22 @@
+---       
+- name: "UPGRADE / DIST-UPGRADE"
+  tags: upgrade
+  block:
+
+    - name: "upgrade : set sources to new distrib version"
+      ansible.builtin.shell: "if [ -e /etc/apt/sources.list ] ; then sed -i 's/{{ os_previous }}/{{ os_codename }}/g' /etc/apt/sources.list ; fi"
+      when:
+        - 'os_previous|string != os_codename|string'
+      ignore_errors: true
+    
+    - name: "upgrade : disable audit.socket"
+      ansible.builtin.shell: systemctl disable --now systemd-journald-audit.socket
+      ignore_errors: true
+      
+    - name: "upgrade : dist-upgrade"
+      apt:
+        autoclean: true
+        autoremove: false
+        state: latest
+        update_cache: true
+        upgrade: dist

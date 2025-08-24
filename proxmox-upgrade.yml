@@ -4,5 +4,5 @@
   remote_user: root
   serial: 1
   roles:
-    - proxmox
+    - proxmox-upgrade
 

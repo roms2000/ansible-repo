@@ -1,0 +1,137 @@
+
+# ---------------------------------------------------------------------- pre-reboot ----------------------------------------------------------------------
+- name: "reboot : pre-reboot"
+  tags: pre_reboot
+  block:
+  
+    - name: "pre reboot : stop cron & monit"
+      ansible.builtin.shell: |
+        systemctl stop monit ; 
+        systemctl stop cron ;
+      ignore_errors: true
+      
+    - name: "pre reboot : show vm id"
+      ansible.builtin.shell: |
+        find /etc/pve/qemu-server/ -type f -name '*.conf' | while read line ; do echo "$(basename $line .conf)" ; done
+      register: result
+      
+    - name: "pre reboot : set vmids"
+      set_fact:
+        vmids: "{{ result['stdout_lines'] }}"
+      
+    - name: "pre reboot : migrate : to other node"
+      ansible.builtin.shell: |
+        echo "Migration de {{ item }} vers {{ qm_migrate_to }}" ; 
+        qm migrate {{ item }} {{ qm_migrate_to }} --online ;
+      loop: '{{ vmids if vmids is iterable else [] }}'
+      loop_control:
+        label: '{{ item }} --> {{ qm_migrate_to }}'
+      when: 
+        - qm_migrate_to != "auto"
+        - qm_migrate_to != "shutdown"
+      
+    - name: "pre reboot : migrate : shutdown"
+      ansible.builtin.shell: |
+        echo "Shutdown de {{ item }}" ; 
+        if [ -e /etc/pve/roms/qm-shutdown-all.sh ] ; then 
+          bash /etc/pve/roms/qm-shutdown-all.sh {{ item }} ; 
+        fi ; 
+        qm shutdown {{ item }}
+      loop: '{{ vmids }}'
+      loop_control:
+        label: '{{ item }} --> shutdown'
+      when: 
+        - qm_migrate_to == "shutdown"
+    
+    - name: "pre reboot : migrate : HA : maintenance on"
+      ansible.builtin.shell: |
+        echo "Activation du mode maintenance du noeud (HA)" ;
+        ha-manager crm-command node-maintenance enable $(hostname -s) ; 
+        /bin/true
+      when: 
+        - qm_migrate_to == "ha"
+
+    - name: "pre reboot : migrate : auto"
+      ansible.builtin.shell: |
+        echo "ha/shutdown/reboot will perform the necessary step" ; 
+        ha-manager crm-command node-maintenance enable $(hostname -s)
+        STARTED=$(ha-manager config | grep -E '(^vm|ct)|state' | sed -E 'N;s/^(vm|ct):([0-9]+)\n[[:space:]]*state (.+)$/\2:\3/' | cut -d ':' -f 1)
+        for x in {{ vmids }} ; do
+          if ! echo "$STARTED" | grep -qw "$x" ; then
+            if [ -e /etc/pve/roms/qm-shutdown-all.sh ] ; then bash /etc/pve/roms/qm-shutdown-all.sh $x ; fi
+            qm shutdown $x
+          fi
+        done
+        /bin/true
+      when: 
+        - qm_migrate_to == "auto"
+        
+# ---------------------------------------------------------------------- reboot ----------------------------------------------------------------------
+- name: "reboot : reboot"
+  tags: reboot
+  block:
+  
+    - name: "reboot : check /usr/bin/kvm does not exist"
+      ansible.builtin.shell: |
+        ps aux | grep -v grep | grep /usr/bin/kvm
+      register: result
+      failed_when: result.stdout != ""
+      retries: 60
+      delay: 10
+      until: result is not failed
+    
+    - name: "reboot : wait ceph is healthy (no recovering)"
+      ansible.builtin.shell: |
+        ceph -s | grep 'recovering'
+      register: result
+      #failed_when: result.stdout != "HEALTH_OK"
+      failed_when: result.stdout != ""
+      changed_when: result.stdout == ""
+      retries: 60
+      delay: 10
+      until: result is not failed
+      
+    - name: "reboot : reboot"
+      ansible.builtin.reboot:
+        connect_timeout: 10
+        pre_reboot_delay: 60
+        post_reboot_delay: 120
+        msg: "Reboot de la machine dans quelques secondes ..."
+        #reboot_command: /bin/true
+
+
+# ---------------------------------------------------------------------- post-reboot ----------------------------------------------------------------------
+- name: "reboot : post-reboot"
+  tags: post_reboot
+  block:
+
+    - name: "post reboot : migrate : HA : maintenance off"
+      ansible.builtin.shell: |
+        echo "Dé-activation du mode maintenance du noeud (HA)" ;
+        ha-manager crm-command node-maintenance disable $(hostname -s) ; 
+        /bin/true ;
+      when: 
+        - qm_migrate_to == "ha" or qm_migrate_to == "auto"
+
+    - name: "tasks repository - after reboot"
+      ansible.builtin.import_tasks: 
+        file: repository.yml
+          
+    - name: "tasks update - after reboot"
+      ansible.builtin.import_tasks: 
+        file: update.yml
+
+    - name: "post reboot : wait ceph is healthy (no undersized)"
+      ansible.builtin.shell: |
+        ceph -s | grep 'undersized'
+      register: result
+      failed_when: result.stdout != ""
+      changed_when: result.stdout == ""
+      retries: 60
+      delay: 10
+      until: result is not failed
+
+    - name: "tasks ceph - after reboot"
+      tags: post_reboot
+      ansible.builtin.import_tasks: 
+        file: ceph-post_reboot.yml

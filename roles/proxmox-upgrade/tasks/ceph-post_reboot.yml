@@ -1,0 +1,22 @@
+---
+# ---------------------------------------------------------------------- post reboot seulement ----------------------------------------------------------------------
+- name: "ceph post reboot config"
+  tags: ceph
+  block:
+
+    - name: "post reboot : ceph : check require_osd_release"
+      ansible.builtin.shell: |
+        ceph -s | grep -E "all OSDs are running {{ ceph_codename }} or later but require_osd_release < .+" ; 
+        /bin/true ;
+      register: result
+      
+    - name: "post reboot : ceph : set require_osd_release"
+      ansible.builtin.shell: |
+        ceph osd require-osd-release {{ ceph_codename }}
+      when: 
+        - 'ceph_codename|string in result.stdout'
+
+    - name: "post reboot : ceph osd unset noout"
+      ansible.builtin.shell: |
+        ceph osd unset noout
+      ignore_errors: true
