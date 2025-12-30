@@ -3,6 +3,14 @@
   tags: update
   block:
 
+    - name: "pre update : HA : maintenance on"
+      ansible.builtin.shell: |
+        echo "Activation du mode maintenance du noeud (HA)" ;
+        ha-manager crm-command node-maintenance enable $(hostname -s) ; 
+        /bin/true
+      when: 
+        - qm_migrate_to == "ha"
+
     - name: "apt : full-upgrade"
       apt:
         autoclean: true
