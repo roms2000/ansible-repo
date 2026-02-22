@@ -21,5 +21,7 @@
         state: latest
         update_cache: true
         upgrade: full
+      retries: 3
+      delay: 10  
       #when:
       #  - upgrade is not defined or upgrade == ''
