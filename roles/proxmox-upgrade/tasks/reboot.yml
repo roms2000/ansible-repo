@@ -4,6 +4,12 @@
   tags: pre_reboot
   block:
   
+    - name: "pre reboot : HA : maintenance on"
+      ansible.builtin.shell: |
+        echo "Activation du mode maintenance du noeud (HA)" ;
+        ha-manager crm-command node-maintenance enable $(hostname -s) ; 
+        /bin/true
+
     - name: "pre reboot : stop cron & monit"
       ansible.builtin.shell: |
         systemctl stop monit ; 
@@ -110,8 +116,8 @@
         echo "Dé-activation du mode maintenance du noeud (HA)" ;
         ha-manager crm-command node-maintenance disable $(hostname -s) ; 
         /bin/true ;
-      when: 
-        - qm_migrate_to == "ha" or qm_migrate_to == "auto"
+      #when: 
+      #  - qm_migrate_to == "ha" or qm_migrate_to == "auto"
 
     - name: "tasks repository - after reboot"
       ansible.builtin.import_tasks: 
